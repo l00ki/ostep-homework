@@ -1,0 +1,174 @@
+#+TITLE: THE ABSTRACTION: THE PROCESS
+
+1. We expect a high amount of IO, since the CPU-heavy process 0 is short and the IO-heavy process 1 is long.
+
+   #+begin_src sh :results verbatim :exports both
+   python3 ./process-run.py -l 5:100,100:5 -c -p | tail
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+   689           DONE       BLOCKED                           1
+   690           DONE       BLOCKED                           1
+   691           DONE       BLOCKED                           1
+   692           DONE       BLOCKED                           1
+   693*          DONE   RUN:io_done             1          
+
+   Stats: Total Time 693
+   Stats: CPU Busy 203 (29.29%)
+   Stats: IO Busy  490 (70.71%)
+
+   #+end_example
+
+2. Process 0 does 4 CPU ops. Process 1 does 2 CPU and 5 IO ops. Time will be split 60:40.
+   
+   #+begin_src sh :results verbatim :exports both
+   python3 ./process-run.py -l 4:100,1:0 -c -p | tail
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+     7           DONE       BLOCKED                           1
+     8           DONE       BLOCKED                           1
+     9           DONE       BLOCKED                           1
+    10           DONE       BLOCKED                           1
+    11*          DONE   RUN:io_done             1          
+
+   Stats: Total Time 11
+   Stats: CPU Busy 6 (54.55%)
+   Stats: IO Busy  5 (45.45%)
+
+   #+end_example
+
+3. Since process 0 starts the IO op at the start, the scheduler can run process 1 while waiting for IO to finish.
+   This will result in only one out of 7 units of CPU time waiting for IO. 
+   
+   #+begin_src sh :results verbatim :exports both
+   python3 ./process-run.py -l 1:0,4:100 -c -p | tail
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+     3        BLOCKED       RUN:cpu             1             1
+     4        BLOCKED       RUN:cpu             1             1
+     5        BLOCKED       RUN:cpu             1             1
+     6        BLOCKED          DONE                           1
+     7*   RUN:io_done          DONE             1          
+
+   Stats: Total Time 7
+   Stats: CPU Busy 6 (85.71%)
+   Stats: IO Busy  5 (71.43%)
+
+   #+end_example
+
+4. Since the scheduler can't switch to the other process while waiting for IO, the order of processes are irrelevant.
+   We are back to the usage pattern in ex 2, with 60% CPU time.
+
+   #+begin_src sh :results verbatim :exports both
+   python3 ./process-run.py -l 1:0,4:100 -S SWITCH_ON_END -c -p | tail
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+     7*   RUN:io_done         READY             1          
+     8           DONE       RUN:cpu             1          
+     9           DONE       RUN:cpu             1          
+    10           DONE       RUN:cpu             1          
+    11           DONE       RUN:cpu             1          
+
+   Stats: Total Time 11
+   Stats: CPU Busy 6 (54.55%)
+   Stats: IO Busy  5 (45.45%)
+
+   #+end_example
+
+5. This seems to be the default behavior, we get the 85% usage of ex. 3.
+
+   #+begin_src sh :results verbatim :exports both
+   python3 ./process-run.py -l 1:0,4:100 -c -S SWITCH_ON_IO -p | tail
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+     3        BLOCKED       RUN:cpu             1             1
+     4        BLOCKED       RUN:cpu             1             1
+     5        BLOCKED       RUN:cpu             1             1
+     6        BLOCKED          DONE                           1
+     7*   RUN:io_done          DONE             1          
+
+   Stats: Total Time 7
+   Stats: CPU Busy 6 (85.71%)
+   Stats: IO Busy  5 (71.43%)
+
+   #+end_example
+
+6. This is not efficient, since the IO-heavy process 0 could have been
+   continuing waiting for IO while the CPU-heavy processes run. 
+
+   #+begin_src sh :results verbatim :exports both
+   python3 process-run.py -l 3:0,5:100,5:100,5:100 -S SWITCH_ON_IO -I IO_RUN_LATER -c -p | tail
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+    27        BLOCKED          DONE          DONE          DONE                           1
+    28        BLOCKED          DONE          DONE          DONE                           1
+    29        BLOCKED          DONE          DONE          DONE                           1
+    30        BLOCKED          DONE          DONE          DONE                           1
+    31*   RUN:io_done          DONE          DONE          DONE             1          
+
+   Stats: Total Time 31
+   Stats: CPU Busy 21 (67.74%)
+   Stats: IO Busy  15 (48.39%)
+
+   #+end_example
+
+7. A program which does one IO operation is likely to do another. Returning to
+   it immediately makes it more likely to run into another waiting for IO period
+   in which CPU-heavy processes can continue.
+
+   #+begin_src sh :results verbatim :exports both
+   python3 process-run.py -l 3:0,5:100,5:100,5:100 -S SWITCH_ON_IO -I IO_RUN_IMMEDIATE -c -p | tail
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+    17        BLOCKED          DONE          DONE       RUN:cpu             1             1
+    18        BLOCKED          DONE          DONE       RUN:cpu             1             1
+    19        BLOCKED          DONE          DONE       RUN:cpu             1             1
+    20        BLOCKED          DONE          DONE       RUN:cpu             1             1
+    21*   RUN:io_done          DONE          DONE          DONE             1          
+
+   Stats: Total Time 21
+   Stats: CPU Busy 21 (100.00%)
+   Stats: IO Busy  15 (71.43%)
+
+   #+end_example
+
+8. Since we can't predict which processes are IO-heavy, we can't predict which
+   flag will be optimal. SWITCH_ON_IO will always be better though, since it guarantees that we
+   get some cycles to run CPU instructions while waiting for IO to finish.
+
+   #+begin_src sh :results verbatim :exports both
+   python3 process-run.py -s 3 -l 3:50,3:50 -I IO_RUN_IMMEDIATE -S SWITCH_ON_IO -c -p | tail -n 3
+   python3 process-run.py -s 3 -l 3:50,3:50 -I IO_RUN_IMMEDIATE -S SWITCH_ON_END -c -p | tail -n 3
+   python3 process-run.py -s 3 -l 3:50,3:50 -I IO_RUN_LATER -S SWITCH_ON_IO -c -p | tail -n 3
+   python3 process-run.py -s 3 -l 3:50,3:50 -I IO_RUN_LATER -S SWITCH_ON_END -c -p | tail -n 3
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+   Stats: CPU Busy 9 (52.94%)
+   Stats: IO Busy  11 (64.71%)
+
+   Stats: CPU Busy 9 (37.50%)
+   Stats: IO Busy  15 (62.50%)
+
+   Stats: CPU Busy 9 (50.00%)
+   Stats: IO Busy  11 (61.11%)
+
+   Stats: CPU Busy 9 (37.50%)
+   Stats: IO Busy  15 (62.50%)
+
+   #+end_example
+
