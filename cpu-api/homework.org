@@ -1,0 +1,859 @@
+#+TITLE: Interlude: Process API
+#+PROPERTY: header-args :results verbatim :exports both
+#+PROPERTY: header-args:C+ :includes '(<fcntl.h> <stdio.h> <string.h> <sys/wait.h> <unistd.h>)
+
+* Simulation
+
+1. a(b), a(b, c), a(b), a(b, d), a(b, d, e)
+   
+   #+begin_src sh
+     ./fork.py -s 10 -c | tail -n 19
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+   Action: a forks b
+                                  a
+                                  └── b
+   Action: a forks c
+                                  a
+                                  ├── b
+                                  └── c
+   Action: c EXITS
+                                  a
+                                  └── b
+   Action: a forks d
+                                  a
+                                  ├── b
+                                  └── d
+   Action: a forks e
+                                  a
+                                  ├── b
+                                  ├── d
+                                  └── e
+   #+end_example
+
+2. High fork percentage results in large and complex process trees, lower percentages in smaller and simpler ones.
+   #+begin_src sh
+     ./fork.py -s 10 -a 100 -f 0.9 -c -F
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+
+   ARG seed 10
+   ARG fork_percentage 0.9
+   ARG actions 100
+   ARG action_list 
+   ARG show_tree False
+   ARG just_final True
+   ARG leaf_only False
+   ARG local_reparent False
+   ARG print_style fancy
+   ARG solve True
+
+                              Process Tree:
+                                  a
+
+   Action: a forks b
+   Action: a forks c
+   Action: c forks d
+   Action: a forks e
+   Action: b forks f
+   Action: f forks g
+   Action: e forks h
+   Action: c forks i
+   Action: e forks j
+   Action: g forks k
+   Action: i forks l
+   Action: l EXITS
+   Action: a forks m
+   Action: b forks n
+   Action: d EXITS
+   Action: m forks o
+   Action: i forks p
+   Action: a forks q
+   Action: o forks r
+   Action: e forks s
+   Action: a forks t
+   Action: q forks u
+   Action: m forks v
+   Action: c forks w
+   Action: i forks x
+   Action: c forks y
+   Action: c forks z
+   Action: v forks A
+   Action: m EXITS
+   Action: g forks B
+   Action: s forks C
+   Action: e forks D
+   Action: f forks E
+   Action: z forks F
+   Action: q forks G
+   Action: q forks H
+   Action: z forks I
+   Action: n forks J
+   Action: r forks K
+   Action: q forks L
+   Action: A forks M
+   Action: v forks N
+   Action: w EXITS
+   Action: c forks O
+   Action: u forks P
+   Action: s forks Q
+   Action: z forks R
+   Action: h forks S
+   Action: R forks T
+   Action: b forks U
+   Action: B forks V
+   Action: f forks W
+   Action: y forks X
+   Action: A EXITS
+   Action: x forks Y
+   Action: y forks Z
+   Action: V forks aa
+   Action: y forks ab
+   Action: X forks ac
+   Action: o forks ad
+   Action: O forks ae
+   Action: J forks af
+   Action: E forks ag
+   Action: ae forks ah
+   Action: aa forks ai
+   Action: ac forks aj
+   Action: af forks ak
+   Action: ai forks al
+   Action: t EXITS
+   Action: j forks am
+   Action: ai forks an
+   Action: z forks ao
+   Action: o forks ap
+   Action: g forks aq
+   Action: aj EXITS
+   Action: aa forks ar
+   Action: M forks as
+   Action: W forks at
+   Action: v forks au
+   Action: V forks av
+   Action: r forks aw
+   Action: ao forks ax
+   Action: Z forks ay
+   Action: J forks az
+   Action: e forks aA
+   Action: M forks aB
+   Action: Z forks aC
+   Action: af forks aD
+   Action: S forks aE
+   Action: N forks aF
+   Action: ak forks aG
+   Action: O forks aH
+   Action: R forks aI
+   Action: am forks aJ
+   Action: M forks aK
+   Action: aI forks aL
+   Action: ao EXITS
+   Action: az forks aM
+   Action: b forks aN
+   Action: H forks aO
+
+                           Final Process Tree:
+                                  a
+                                  ├── b
+                                  │   ├── f
+                                  │   │   ├── g
+                                  │   │   │   ├── k
+                                  │   │   │   ├── B
+                                  │   │   │   │   └── V
+                                  │   │   │   │       ├── aa
+                                  │   │   │   │       │   ├── ai
+                                  │   │   │   │       │   │   ├── al
+                                  │   │   │   │       │   │   └── an
+                                  │   │   │   │       │   └── ar
+                                  │   │   │   │       └── av
+                                  │   │   │   └── aq
+                                  │   │   ├── E
+                                  │   │   │   └── ag
+                                  │   │   └── W
+                                  │   │       └── at
+                                  │   ├── n
+                                  │   │   └── J
+                                  │   │       ├── af
+                                  │   │       │   ├── ak
+                                  │   │       │   │   └── aG
+                                  │   │       │   └── aD
+                                  │   │       └── az
+                                  │   │           └── aM
+                                  │   ├── U
+                                  │   └── aN
+                                  ├── c
+                                  │   ├── i
+                                  │   │   ├── p
+                                  │   │   └── x
+                                  │   │       └── Y
+                                  │   ├── y
+                                  │   │   ├── X
+                                  │   │   │   └── ac
+                                  │   │   ├── Z
+                                  │   │   │   ├── ay
+                                  │   │   │   └── aC
+                                  │   │   └── ab
+                                  │   ├── z
+                                  │   │   ├── F
+                                  │   │   ├── I
+                                  │   │   └── R
+                                  │   │       ├── T
+                                  │   │       └── aI
+                                  │   │           └── aL
+                                  │   └── O
+                                  │       ├── ae
+                                  │       │   └── ah
+                                  │       └── aH
+                                  ├── e
+                                  │   ├── h
+                                  │   │   └── S
+                                  │   │       └── aE
+                                  │   ├── j
+                                  │   │   └── am
+                                  │   │       └── aJ
+                                  │   ├── s
+                                  │   │   ├── C
+                                  │   │   └── Q
+                                  │   ├── D
+                                  │   └── aA
+                                  ├── q
+                                  │   ├── u
+                                  │   │   └── P
+                                  │   ├── G
+                                  │   ├── H
+                                  │   │   └── aO
+                                  │   └── L
+                                  ├── o
+                                  │   ├── ad
+                                  │   └── ap
+                                  ├── r
+                                  │   ├── K
+                                  │   └── aw
+                                  ├── v
+                                  │   ├── N
+                                  │   │   └── aF
+                                  │   └── au
+                                  ├── M
+                                  │   ├── as
+                                  │   ├── aB
+                                  │   └── aK
+                                  └── ax
+
+   #+end_example
+
+   #+begin_src sh
+     ./fork.py -s 10 -a 100 -f 0.1 -c -F
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+
+   ARG seed 10
+   ARG fork_percentage 0.1
+   ARG actions 100
+   ARG action_list 
+   ARG show_tree False
+   ARG just_final True
+   ARG leaf_only False
+   ARG local_reparent False
+   ARG print_style fancy
+   ARG solve True
+
+                              Process Tree:
+                                  a
+
+   Action: a forks b
+   Action: b EXITS
+   Action: a forks c
+   Action: a forks d
+   Action: c EXITS
+   Action: d EXITS
+   Action: a forks e
+   Action: a forks f
+   Action: e EXITS
+   Action: f EXITS
+   Action: a forks g
+   Action: g EXITS
+   Action: a forks h
+   Action: h EXITS
+   Action: a forks i
+   Action: a forks j
+   Action: i EXITS
+   Action: j EXITS
+   Action: a forks k
+   Action: k EXITS
+   Action: a forks l
+   Action: l EXITS
+   Action: a forks m
+   Action: m EXITS
+   Action: a forks n
+   Action: n forks o
+   Action: o EXITS
+   Action: n EXITS
+   Action: a forks p
+   Action: a forks q
+   Action: q EXITS
+   Action: a forks r
+   Action: p EXITS
+   Action: r EXITS
+   Action: a forks s
+   Action: s forks t
+   Action: t EXITS
+   Action: s forks u
+   Action: u EXITS
+   Action: s EXITS
+   Action: a forks v
+   Action: v EXITS
+   Action: a forks w
+   Action: w EXITS
+   Action: a forks x
+   Action: x EXITS
+   Action: a forks y
+   Action: a forks z
+   Action: y EXITS
+   Action: z EXITS
+   Action: a forks A
+   Action: A EXITS
+   Action: a forks B
+   Action: B EXITS
+   Action: a forks C
+   Action: C EXITS
+   Action: a forks D
+   Action: a forks E
+   Action: E forks F
+   Action: D EXITS
+   Action: F EXITS
+   Action: E forks G
+   Action: G EXITS
+   Action: E EXITS
+   Action: a forks H
+   Action: H forks I
+   Action: I EXITS
+   Action: H EXITS
+   Action: a forks J
+   Action: J EXITS
+   Action: a forks K
+   Action: K EXITS
+   Action: a forks L
+   Action: L EXITS
+   Action: a forks M
+   Action: M EXITS
+   Action: a forks N
+   Action: N EXITS
+   Action: a forks O
+   Action: O EXITS
+   Action: a forks P
+   Action: P EXITS
+   Action: a forks Q
+   Action: Q EXITS
+   Action: a forks R
+   Action: R EXITS
+   Action: a forks S
+   Action: S EXITS
+   Action: a forks T
+   Action: T EXITS
+   Action: a forks U
+   Action: U EXITS
+   Action: a forks V
+   Action: V EXITS
+   Action: a forks W
+   Action: W EXITS
+   Action: a forks X
+   Action: X EXITS
+   Action: a forks Y
+   Action: Y EXITS
+
+                           Final Process Tree:
+                                  a
+
+   #+end_example
+
+3. a forks b, b exits, a forks c, c forks d, a forks e.
+   
+   #+begin_src sh
+     ./fork.py -s 20 -t -c
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+
+   ARG seed 20
+   ARG fork_percentage 0.7
+   ARG actions 5
+   ARG action_list 
+   ARG show_tree True
+   ARG just_final False
+   ARG leaf_only False
+   ARG local_reparent False
+   ARG print_style fancy
+   ARG solve True
+
+                              Process Tree:
+                                  a
+
+   Action: a forks b
+                                  a
+                                  └── b
+   Action: b EXITS
+                                  a
+   Action: a forks c
+                                  a
+                                  └── c
+   Action: c forks d
+                                  a
+                                  └── c
+                                      └── d
+   Action: a forks e
+                                  a
+                                  ├── c
+                                  │   └── d
+                                  └── e
+   #+end_example
+
+4. without `-R`: a(b, d, e), with `-R`: a(b(d, e))
+
+   #+begin_src sh
+     ./fork.py -A a+b,b+c,c+d,c+e,c- -c -F
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+
+   ARG seed -1
+   ARG fork_percentage 0.7
+   ARG actions 5
+   ARG action_list a+b,b+c,c+d,c+e,c-
+   ARG show_tree False
+   ARG just_final True
+   ARG leaf_only False
+   ARG local_reparent False
+   ARG print_style fancy
+   ARG solve True
+
+                              Process Tree:
+                                  a
+
+   Action: a forks b
+   Action: b forks c
+   Action: c forks d
+   Action: c forks e
+   Action: c EXITS
+
+                           Final Process Tree:
+                                  a
+                                  ├── b
+                                  ├── d
+                                  └── e
+
+   #+end_example
+
+   #+begin_src sh
+     ./fork.py -A a+b,b+c,c+d,c+e,c- -c -R -F
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+
+   ARG seed -1
+   ARG fork_percentage 0.7
+   ARG actions 5
+   ARG action_list a+b,b+c,c+d,c+e,c-
+   ARG show_tree False
+   ARG just_final True
+   ARG leaf_only False
+   ARG local_reparent True
+   ARG print_style fancy
+   ARG solve True
+
+                              Process Tree:
+                                  a
+
+   Action: a forks b
+   Action: b forks c
+   Action: c forks d
+   Action: c forks e
+   Action: c EXITS
+
+                           Final Process Tree:
+                                  a
+                                  └── b
+                                      ├── d
+                                      └── e
+
+   #+end_example
+
+5. a(c, d, e)
+
+   #+begin_src sh
+     ./fork.py -s 1337 -F -c
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+
+   ARG seed 1337
+   ARG fork_percentage 0.7
+   ARG actions 5
+   ARG action_list 
+   ARG show_tree False
+   ARG just_final True
+   ARG leaf_only False
+   ARG local_reparent False
+   ARG print_style fancy
+   ARG solve True
+
+                              Process Tree:
+                                  a
+
+   Action: a forks b
+   Action: b forks c
+   Action: c forks d
+   Action: d forks e
+   Action: b EXITS
+
+                           Final Process Tree:
+                                  a
+                                  ├── c
+                                  ├── d
+                                  └── e
+
+   #+end_example
+
+6. a+b,b+c,c+d,c+e,d-
+
+   #+begin_src sh
+     ./fork.py -s 1338 -F -t -c
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+
+   ARG seed 1338
+   ARG fork_percentage 0.7
+   ARG actions 5
+   ARG action_list 
+   ARG show_tree True
+   ARG just_final True
+   ARG leaf_only False
+   ARG local_reparent False
+   ARG print_style fancy
+   ARG solve True
+
+                              Process Tree:
+                                  a
+
+   Action: a forks b
+   Action: b forks c
+   Action: c forks d
+   Action: d EXITS
+   Action: c forks e
+
+                           Final Process Tree:
+                                  a
+                                  └── b
+                                      └── c
+                                          └── e
+
+   #+end_example
+
+* Code
+
+1. Since the stack is copied to the child process, the variable's value will be the same as in the parent process.
+   When both processes change the value, the change will be local to the respective process.
+
+   #+begin_src C
+     int x = 100;
+     int rc_fork = fork();
+     if (rc_fork > 0) {
+       printf("%d\n", x);
+       x = 200;
+       printf("%d\n", x);
+     }
+     if (rc_fork == 0) {
+       x = 300;
+       printf("%d\n", x);
+     }
+   #+end_src
+
+   #+RESULTS:
+   : 100
+   : 200
+   : 300
+
+2. Both write to the file descriptor defined in the parent.
+
+   #+begin_src C
+     close(STDOUT_FILENO);
+     open("./hw2.output", O_CREAT | O_WRONLY | O_TRUNC, S_IRWXU);
+     int rc_fork = fork();
+
+     if (rc_fork != 0) {
+       printf("parent\n");
+     }
+
+     if (rc_fork == 0) {
+       printf("child\n");
+     }
+   #+end_src
+
+   #+RESULTS:
+
+   #+begin_src sh
+     cat ./hw2.output
+   #+end_src
+
+   #+RESULTS:
+   : parent
+   : child
+
+3. The parent process can `wait` for the child to finish.
+
+   #+begin_src C
+     int rc_fork = fork();
+
+     if (rc_fork == 0) {
+       printf("hello\n");
+     }
+
+     if (rc_fork > 0) {
+       wait(NULL);
+       printf("goodbye\n");
+     }
+   #+end_src
+
+   #+RESULTS:
+   : hello
+   : goodbye
+
+4. Many use cases make it convenient to provide specialized variants of `exec`.
+
+   #+begin_src C
+     char* argv_new[] = { "ls", NULL };
+     execl("/bin/ls", argv_new[0], argv_new[1]);
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+   README-fork.md
+   README-generator.md
+   README.md
+   fork.py
+   generator.py
+   homework.org
+   hw2.output
+   p1
+   p1.c
+   p2
+   p2.c
+   p3
+   p3.c
+   p4
+   p4.c
+   p4.output
+   #+end_example
+
+   #+begin_src C
+     char* argv_new[] = { "ls", NULL };
+     char* envp[] = { "PWD=/Users/neggi/", NULL };
+     execle("/bin/ls", argv_new[0], argv_new[1], envp);
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+   README-fork.md
+   README-generator.md
+   README.md
+   fork.py
+   generator.py
+   homework.org
+   hw2.output
+   p1
+   p1.c
+   p2
+   p2.c
+   p3
+   p3.c
+   p4
+   p4.c
+   p4.output
+   #+end_example
+
+   #+begin_src C
+     char* argv_new[] = { "ls", NULL };
+     execlp("ls", argv_new[0], argv_new[1]);
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+   README-fork.md
+   README-generator.md
+   README.md
+   fork.py
+   generator.py
+   homework.org
+   hw2.output
+   p1
+   p1.c
+   p2
+   p2.c
+   p3
+   p3.c
+   p4
+   p4.c
+   p4.output
+   #+end_example
+
+   #+begin_src C
+     char* argv_new[] = { "ls", NULL };
+     execv("/bin/ls", argv_new);
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+   README-fork.md
+   README-generator.md
+   README.md
+   fork.py
+   generator.py
+   homework.org
+   hw2.output
+   p1
+   p1.c
+   p2
+   p2.c
+   p3
+   p3.c
+   p4
+   p4.c
+   p4.output
+   #+end_example
+
+   #+begin_src C
+     char* argv_new[] = { "ls", NULL };
+     execvp("ls", argv_new);
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+   README-fork.md
+   README-generator.md
+   README.md
+   fork.py
+   generator.py
+   homework.org
+   hw2.output
+   p1
+   p1.c
+   p2
+   p2.c
+   p3
+   p3.c
+   p4
+   p4.c
+   p4.output
+   #+end_example
+
+   #+begin_src C
+     char* argv_new[] = { "ls", NULL };
+     char* search_path = "/bin";
+     execvP("ls", search_path, argv_new);
+   #+end_src
+
+   #+RESULTS:
+   #+begin_example
+   README-fork.md
+   README-generator.md
+   README.md
+   fork.py
+   generator.py
+   homework.org
+   hw2.output
+   p1
+   p1.c
+   p2
+   p2.c
+   p3
+   p3.c
+   p4
+   p4.c
+   p4.output
+   #+end_example
+
+5. Using wait in the child returns -1, indicating a failure.
+
+   #+begin_src C
+     int rc_fork = fork();
+     printf("%d\n", rc_fork);
+     int rc_wait = wait(NULL);
+     printf("%d\n", rc_wait);
+   #+end_src
+
+   #+RESULTS:
+   : 0
+   : -1
+   : 24980
+   : 24980
+
+6. `waitpid` can be useful if one parent process needs to manage multiple children.
+
+   #+begin_src C
+     int rc_fork = fork();
+     printf("%d\n", rc_fork);
+     if (rc_fork > 0)
+     {
+       int rc_wait = waitpid(rc_fork, NULL, 0);
+       printf("%d\n", rc_wait);
+     }
+   #+end_src 
+
+   #+RESULTS:
+   : 0
+   : 24994
+   : 24994
+
+7. No output is generated.
+
+   #+begin_src C
+     int rc_fork = fork();
+     if (rc_fork == 0) {
+       close(STDOUT_FILENO);
+       printf("hello");
+     }
+   #+end_src
+
+   #+RESULTS:
+   
+8. Child no 1 receives a message from child no 2.
+
+   #+begin_src C
+     int fildes[] = { -1, -1 };
+     pipe(fildes);
+
+     int rc_fork_1 = fork();
+
+     int rc_fork_2 = fork();
+
+     const int MSGSIZE = 16;
+     char msgin[MSGSIZE];
+
+     if (rc_fork_1 == 0 && rc_fork_2 != 0) {
+       close(STDIN_FILENO);
+       dup2(fildes[0], STDIN_FILENO);
+       read(fildes[0], msgin,MSGSIZE);
+       printf("%s\n", msgin);
+     }
+
+     if (rc_fork_1 == 0 && rc_fork_2 == 0) {
+       close(STDOUT_FILENO);
+       dup2(fildes[1], STDOUT_FILENO);
+       char msg[] = "hello";
+       write(fildes[1], msg, MSGSIZE);
+     }
+   #+end_src
+
+   #+RESULTS:
+   : hello
